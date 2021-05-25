@@ -16,7 +16,7 @@ pipeline {
             defaultValue: '',
             description: 'parameter for pytest-split'
         )
-    }
+    } // parameters
     stages {
         stage('Rename build') {
             steps {
@@ -26,24 +26,23 @@ pipeline {
                 script {
                     currentBuild.description = "${currentBuild.absoluteUrl}"
                 }
-            }
-        }
-      }
+            } // steps
+        } //stage Rename build
       stage('Print params') {
           steps {
                 echo "${params.PKG_NAME}"
                 echo "${params.GROUP}"
 
           }
-      }
+      } // stage Print params
       stage('Run test') {
           steps {
               sh 'python3 -m pip install -r requirements.txt'
               sh 'python3 -m pytest -v --junitxml=report.xml .'
               sh 'python3 junit_xml_add.py . ${PKG_NAME}'
           }
-      }
-   }
+      } // stage Run test
+   } // stages
    post {
         always {
             echo 'Archive artifacts and tests results'
@@ -66,5 +65,5 @@ pipeline {
                 }
             }
         }
-    }
-}
+    } // post
+} // pipeline
