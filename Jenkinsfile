@@ -39,14 +39,15 @@ pipeline {
           steps {
               sh 'python3 -m pip install -r requirements.txt'
               sh 'python3 -m pytest -v --junitxml=report.xml .'
-              sh 'python3 junit_xml_add.py . ${PKG_NAME}'
           }
       } // stage Run test
    } // stages
    post {
         always {
+            echo 'Add infor about package/platform to test results'
+            sh 'python3 junit_xml_add.py . ${PKG_NAME}'
             echo 'Archive artifacts and tests results'
-            archive '*.xml'
+            archiveArtifacts allowEmptyArchive: true, artifacts: '*.xml', followSymlinks: false
             junit allowEmptyResults: true, testResults: 'report.xml'
             script {
                 def build = currentBuild.rawBuild
