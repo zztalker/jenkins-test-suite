@@ -18,11 +18,8 @@ pipeline {
         )
     } // parameters
     stages {
-        stage('Clean workspace') {
             steps {
-                cleanWs notFailBuild: true
             }
-        }
         stage('Rename build') {
             steps {
                 script {
@@ -50,7 +47,7 @@ pipeline {
    } // stages
    post {
         always {
-            echo 'Add infor about package/platform to test results'
+            echo 'Add information about package/platform to test results'
             sh 'python3 junit_xml_add.py . ${PKG_NAME}'
             echo 'Archive artifacts and tests results'
             archiveArtifacts allowEmptyArchive: true, artifacts: '*.xml', followSymlinks: false
@@ -70,6 +67,7 @@ pipeline {
                 failedTests.each { test ->
                     test.description = "${PKG_NAME} ${GROUP}-${GROUP_COUNT} ${test.getFullName()}";
                 }
+                cleanWs notFailBuild: true
             }
         }
     } // post
