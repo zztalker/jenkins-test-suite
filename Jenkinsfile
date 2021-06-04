@@ -18,6 +18,11 @@ pipeline {
         )
     } // parameters
     stages {
+        stage('Clean workspace') {
+            steps {
+                cleanWs notFailBuild: true
+            }
+        }
         stage('Rename build') {
             steps {
                 script {
