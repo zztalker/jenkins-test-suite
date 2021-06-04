@@ -39,7 +39,7 @@ pipeline {
       stage('Run test') {
           steps {
               sh 'python3 -m pip install -r requirements.txt'
-              sh 'python3 -m pytest -v --splits ${params.GROUP_COUNT} --group ${params.GROUP} --junitxml=report.xml .'
+              sh "python3 -m pytest -v --splits ${params.GROUP_COUNT} --group ${params.GROUP} --junitxml=report.xml ."
           }
       } // stage Run test
    } // stages
