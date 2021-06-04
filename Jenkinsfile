@@ -18,8 +18,6 @@ pipeline {
         )
     } // parameters
     stages {
-            steps {
-            }
         stage('Rename build') {
             steps {
                 script {
