@@ -1,0 +1,221 @@
+
+def CONFIGURATIONS = [
+    'Windows': [
+        parameters: [
+            PKG_NAME: 'Windows',
+            GROUP: '1',
+            GROUP_COUNT: '1'
+        ]
+    ],
+    'Linux': [
+        parameters: [
+            PKG_NAME: 'Linux',
+            GROUP: '1',
+            GROUP_COUNT: '1'
+        ]
+    ],
+    'MacOS': [
+        parameters: [
+            PKG_NAME: 'MacOS',
+            GROUP: '1',
+            GROUP_COUNT: '1'
+        ]
+    ]
+]
+def runs = [:]
+pipeline {
+    agent any
+    parameters { string(name: 'GROUP_COUNT', defaultValue: '1', description: '') }
+    stages {
+        stage('Clean ws') {
+            steps {
+                cleanWs notFailBuild: true
+            }
+        }
+        stage('Build all') {
+            steps {
+                script {
+                    def stages = [:]
+                    def ngroups = params.GROUP_COUNT.toInteger()
+                    def should_split_tests = (ngroups > 1)
+                    def confs = [:]
+                    if (should_split_tests) {
+                        echo "Running ${ngroups} test groups in parallel on each test conf"
+                        CONFIGURATIONS.each { conf_name, conf ->
+                            for (def group_no=1; group_no <= ngroups; group_no++) {
+                                def c = copyConf(conf)
+                                c['parameters']['GROUP'] = "${group_no}"
+                                confs["${conf_name}_${group_no}"] = c
+                            }
+                        }
+                    }
+                    else {
+                        confs = CONFIGURATIONS
+                    }
+
+                    
+                    confs.each { conf_name, conf  ->
+                        def current_conf = conf_name
+                        echo "${conf}"
+                        def pkg = conf["parameters"]["PKG_NAME"]
+                        def group = conf["parameters"]["GROUP"]
+                        def param1 = "${pkg}_${group}"
+                        echo "${param1} ${group}"
+                        stages[conf_name] = {
+                            stage(conf_name) {
+                                group = 1
+                                runs[current_conf] = build(
+                                    job: 'zaikin_group_runner',
+                                    wait: true,
+                                    propagate: false,
+                                    parameters: [
+                                        string(name: "PKG_NAME", value: param1),
+                                        string(name: "GROUP_COUNT", value: params.GROUP_COUNT),
+                                        string(name: "GROUP", value: "${group}")
+                                    ]
+                                )
+                                b = runs[current_conf]
+                                echo "${b.getClass()}"
+                                if (b.result != 'SUCCESS') {
+                                    unstable('build failed ' + b.buildVariables.BUILD_URL)
+                                }
+                            }
+                        }
+                    }
+                    parallel stages
+                }
+            }   
+        }
+    }   
+    post {
+        always {
+            script {
+                runs.each { build_name, build ->
+                    // fail if any of the test runs fail
+                    echo "${build_name} ${build.result}" 
+                    echo "${build.getAbsoluteUrl()}"
+                    echo "${build.getRawBuild().getUrl()}"
+                    copyArtifacts(
+                        filter: "*.xml",
+                        fingerprintArtifacts: true,
+                        projectName: build.getProjectName(),
+                        selector: specific(build.getNumber().toString()),
+                        target: "artifacts/${build.getNumber().toString()}/"
+                    )
+                }
+                archiveArtifacts artifacts: '**/*.xml', followSymlinks: false   
+                junit allowEmptyResults: true, testResults: '**/*.xml'
+                addLinksToTests(currentBuild.rawBuild, runs)
+
+            }
+        }
+    }
+}
+
+/**
+ *  Add description to failed tests
+ *  Parameters: build - currentBuild.rawBuild, child_builds map of builds (RunWrappers)
+ */
+@NonCPS
+def addLinksToTests(build, child_builds) {
+  def test_result = build.getAction(hudson.tasks.junit.TestResultAction.class)
+  echo "Prepare test results description"
+  def tests = [:]
+  child_builds.each { conf_name, rpm_build ->
+      tests[conf_name] = [failed:0, passed:0]
+  }
+  if (test_result == null) {
+    echo 'No test results'
+  } else {
+    echo "Gathering failed tests"
+    failedTests = test_result.result.getFailedTests();
+    failedTests.each { test ->
+      def rpm_build = child_builds[test.getPackageName()]
+      totals = tests[test.getPackageName()]
+      if (totals) {
+        totals['failed'] += 1
+        test.description = """<ul>
+            <li>Build <a href=${rpm_build.absoluteUrl}>${rpm_build.getDisplayName()}</a> </li>
+            <li><a href=${rpm_build.absoluteUrl}artifact/dev-utils/rpm-test/artifacts/>Build artifacts</a></li>
+            <li>Test <a href=${rpm_build.absoluteUrl}testReport/${test.getUrl()}>${test.getName()}</a></li> </ul>""";
+      }
+      else {
+        echo "Couldn't find ${test.getPackageName()} configuration."
+      }
+    }
+    echo "Gathering passed tests"
+    passedTests = test_result.result.getPassedTests();
+
+    passedTests.each { test ->
+      totals = tests[test.getPackageName()]
+      if (totals) {
+        totals['passed'] += 1
+      }
+      else {
+        echo "Couldn't find ${test.getPackageName()} configuration."
+      }
+    }
+    def list_of_results = []
+    def even = false
+    echo "Preparing description"
+    sorterd_builds = child_builds.sort { it.key.toLowerCase() }
+    sorterd_builds.each { conf_name, rpm_build ->
+      def passed = tests[conf_name]['passed']
+      def failed = tests[conf_name]['failed']
+      def total = passed + failed
+      def marker = ""
+      if (child_builds[conf_name].result != 'SUCCESS'
+          || (total == 0 && conf_name != 'imunify-antivirus-compare-memory')
+         ) {
+        marker = "color: #a94442;background-color: #f2dede;border-color: #ebccd1;"
+      }
+      if (failed > 0) {
+        marker = "font-weight: bold;"
+      }
+      marker += " background: ${even ? '#CCC' : '#FFF'};"  // color alternating table rows
+      even = ! even
+      list_of_results << """
+        <tr style="${marker}">
+            <td><a href=${rpm_build.absoluteUrl}testReport/>${conf_name}</a></td>
+            <td style="text-align: right;">${failed}</td>
+            <td style="text-align: right;">${passed}</td>
+            <td style="text-align: right;">${total}</td>
+        </tr>"""
+    }
+    test_result.result.setDescription("""
+      <p> Current time: ${java.time.LocalDateTime.now()}
+      <table style="border: 1px #bbb solid; border-collapse: collapse; width: 100%; font-family: 'Trebuchet MS', Arial, Helvetica, sans-serif;">
+      <tr>
+        <th style="padding-top: 12px; padding-bottom: 12px;  text-align: left; background-color: #4CAF50; color: white;">Configuration</th>
+        <th style="padding-top: 12px; padding-bottom: 12px; background-color: #4CAF50; color: white; width:5em; text-align:right">Fail</th>
+        <th style="padding-top: 12px; padding-bottom: 12px; background-color: #4CAF50; color: white; width:5em; text-align:right">Pass</th>
+        <th style="padding-top: 12px; padding-bottom: 12px; background-color: #4CAF50;color: white; width:5em; text-align:right">Total</th>
+      </tr>
+        ${list_of_results.join('\n')}
+      </table>
+    """)
+  }
+}
+
+/**
+ * Shallow copy *conf* map, except making sure new parameters map is created.
+ *
+ * It is poor man's deepCopy.
+ */
+def copyConf(conf) {
+  def c = [:]
+  conf.each { key, value ->
+    if (key != 'parameters') {
+      c[key] = value
+    }
+    else {
+      def params = [:]
+      conf[key].each { name, param ->
+        params[name] = param
+      }
+      c[key] = params
+    }
+  }
+  return c
+}
+
