@@ -54,8 +54,16 @@ pipeline {
                     testResults: 'report.xml',
                     testDataPublishers: [
                         jiraTestResultReporter(
+                            configs: [
+                                jiraStringField(fieldKey: 'summary', value: '${DEFAULT_SUMMARY}'),
+                                jiraStringField(fieldKey: 'description', value: '${DEFAULT_DESCRIPTION}'),
+                                jiraStringArrayField(fieldKey: 'labels', values: [])
+                            ],
                             projectKey: 'K60791',
-                            issueType: '10003'
+                            issueType: '10003',
+                            autoRaiseIssue: false,
+                            autoResolveIssue: false,
+                            autoUnlinkIssue: false,
                         )
                     ]
             )
