@@ -49,7 +49,16 @@ pipeline {
             sh 'python3 junit_xml_add.py . ${PKG_NAME}'
             echo 'Archive artifacts and tests results'
             archiveArtifacts allowEmptyArchive: true, artifacts: '*.xml', followSymlinks: false
-            junit allowEmptyResults: true, testResults: 'report.xml'
+            junit(
+                    allowEmptyResults: true, 
+                    testResults: 'report.xml',
+                    testDataPublishers: [
+                        jiraTestResultReporter(
+                            projectKey: 'K60791',
+                            issueType: '10003'
+                        )
+                    ]
+            )
             script {
                 def build = currentBuild.rawBuild
                 def result = build.getAction(hudson.tasks.junit.TestResultAction.class).result
