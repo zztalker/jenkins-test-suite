@@ -9,3 +9,8 @@ import pytest
 def test_add(a, b, c):
     time.sleep(random.random()/100)
     assert random.random() <= 0.9
+
+
+def test_new():
+    assert False
+
