@@ -12,5 +12,6 @@ def test_add(a, b, c):
 
 
 def test_new():
+    # simple example
     assert False
 
