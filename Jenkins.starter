@@ -65,7 +65,7 @@ pipeline {
                             stage(conf_name) {
                                 group = 1
                                 runs[current_conf] = build(
-                                    job: 'zaikin_group_runner',
+                                    job: 'test-simple-pipeline',
                                     wait: true,
                                     propagate: false,
                                     parameters: [
